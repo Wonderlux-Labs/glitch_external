@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  external-map:
+    build: .
+    container_name: glitchcube-external-map
+    restart: unless-stopped
+    ports:
+      - "9292:9292"
+    environment:
+      - GLITCHCUBE_API_URL=http://100.104.211.107:4567
+      - UPDATE_INTERVAL_SECONDS=120
+      - PORT=9292
+      - RACK_ENV=production
+    networks:
+      - glitchcube-network
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9292/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  glitchcube-network:
+    external: true
+    # Note: If using Tailscale, the container needs to be on the host network
+    # or have Tailscale installed inside the container.
+    # Alternative configuration for host networking:
+    # network_mode: host

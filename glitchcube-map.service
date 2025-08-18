@@ -1,0 +1,37 @@
+[Unit]
+Description=GlitchCube External Map Tracker
+After=network.target tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=simple
+User=glitchcube
+Group=glitchcube
+WorkingDirectory=/opt/glitchcube-external-map
+
+# Environment configuration
+Environment="GLITCHCUBE_API_URL=http://100.104.211.107:4567"
+Environment="UPDATE_INTERVAL_SECONDS=120"
+Environment="PORT=9292"
+Environment="RACK_ENV=production"
+
+# Start command
+ExecStart=/usr/local/bin/bundle exec puma config.ru -p 9292 -e production
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/glitchcube-map/access.log
+StandardError=append:/var/log/glitchcube-map/error.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/glitchcube-external-map /var/log/glitchcube-map
+
+[Install]
+WantedBy=multi-user.target

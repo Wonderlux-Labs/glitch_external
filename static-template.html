@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlitchCube Live Location - Burning Man 2025 [Static Mode]</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin="" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="stylesheets/map.css">
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        .map-info {
+            position: absolute;
+            top: 10px;
+            left: 60px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #333;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-online { background: #00ff00; }
+        .status-offline { background: #ff0000; }
+        .status-static { background: #00aaff; }
+        
+        .location-info {
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px solid #333;
+        }
+        
+        .update-time {
+            color: #888;
+            font-size: 10px;
+            margin-top: 5px;
+        }
+        
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        
+        .control-button {
+            display: block;
+            width: 34px;
+            height: 34px;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
+            border-radius: 3px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: center;
+            line-height: 32px;
+            text-decoration: none;
+        }
+        
+        .control-button:hover {
+            background: rgba(50, 50, 50, 0.9);
+        }
+        
+        .control-button.active {
+            background: rgba(0, 100, 200, 0.8);
+        }
+        
+        .static-banner {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 50, 100, 0.8);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <!-- Map container -->
+    <div id="map"></div>
+    
+    <!-- Status panel -->
+    <div class="map-info">
+        <div>
+            <span id="status-indicator" class="status-indicator status-static"></span>
+            <strong>GlitchCube Location (Static)</strong>
+        </div>
+        <div class="location-info" id="location-info">
+            <div id="location-text">Loading static data...</div>
+            <div id="coordinates"></div>
+            <div id="context"></div>
+        </div>
+        <div class="update-time" id="update-time"></div>
+    </div>
+    
+    <!-- Map controls -->
+    <div class="map-controls">
+        <button class="control-button" id="center-button" title="Center on Cube">📍</button>
+        <button class="control-button" id="landmarks-toggle" title="Toggle Landmarks">🏛️</button>
+        <button class="control-button" id="compass-button" title="Center on Man">🧭</button>
+    </div>
+    
+    <!-- Static mode banner -->
+    <div class="static-banner">
+        📡 Static Mode - Updates every 5 minutes
+    </div>
+    
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
+    
+    <!-- Static Data will be injected here by GitHub Actions -->
+    <!--DATA_INJECTION_POINT-->
+    
+    <!-- Configuration -->
+    <script>
+        window.MAP_CONFIG = {
+            staticMode: true,
+            
+            // Burning Man coordinates
+            goldenSpike: {
+                lat: 40.7864,
+                lng: -119.2065
+            },
+            
+            // Map bounds (approximate Burning Man area)
+            mapBounds: [
+                [40.75, -119.25], // Southwest
+                [40.82, -119.15]  // Northeast
+            ]
+        };
+    </script>
+    
+    <!-- Static-friendly Map JavaScript -->
+    <script src="javascripts/map_utils.js"></script>
+    <script src="javascripts/map_setup.js"></script>
+    <script>
+    // Static version of map_data.js
+    window.MapData = {
+        cache: {
+            lastLocation: null,
+            locationHistory: [],
+            lastUpdate: null,
+            apiStatus: 'static'
+        },
+        
+        // Initialize with static data
+        initWithStaticData: function() {
+            if (window.CUBE_LOCATION) {
+                this.cache.lastLocation = window.CUBE_LOCATION;
+                this.cache.lastUpdate = new Date(window.LAST_UPDATE || Date.now());
+                this.cache.apiStatus = window.CUBE_LOCATION.error ? 'offline' : 'static';
+                
+                // Trigger location update
+                if (this.onLocationUpdateCallback) {
+                    this.onLocationUpdateCallback(window.CUBE_LOCATION);
+                }
+                
+                // Update UI
+                this.updateLocationDisplay();
+            }
+        },
+        
+        onLocationUpdate: function(callback) {
+            this.onLocationUpdateCallback = callback;
+        },
+        
+        onStatusChange: function(callback) {
+            this.onStatusChangeCallback = callback;
+        },
+        
+        getCurrentLocation: function() {
+            return this.cache.lastLocation;
+        },
+        
+        getApiStatus: function() {
+            return this.cache.apiStatus;
+        },
+        
+        getLastUpdate: function() {
+            return this.cache.lastUpdate;
+        },
+        
+        getStatusClass: function() {
+            switch (this.cache.apiStatus) {
+                case 'static': return 'status-static';
+                case 'offline': return 'status-offline';
+                default: return 'status-static';
+            }
+        },
+        
+        updateLocationDisplay: function() {
+            const locationInfo = document.getElementById('location-info');
+            const locationText = document.getElementById('location-text');
+            const coordinates = document.getElementById('coordinates');
+            const context = document.getElementById('context');
+            const updateTime = document.getElementById('update-time');
+            const statusIndicator = document.getElementById('status-indicator');
+            
+            if (this.cache.lastLocation) {
+                const loc = this.cache.lastLocation;
+                
+                if (loc.error) {
+                    locationText.textContent = `Offline: ${loc.error}`;
+                    coordinates.textContent = `Last known: ${loc.lat?.toFixed(6) || 'N/A'}, ${loc.lng?.toFixed(6) || 'N/A'}`;
+                    context.textContent = '';
+                } else {
+                    locationText.textContent = loc.address || 'Unknown location';
+                    coordinates.textContent = `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
+                    context.textContent = loc.zone ? `Zone: ${loc.zone}` : '';
+                }
+            } else {
+                locationText.textContent = 'No location data';
+                coordinates.textContent = '';
+                context.textContent = '';
+            }
+            
+            if (this.cache.lastUpdate) {
+                const timeAgo = Math.round((Date.now() - this.cache.lastUpdate.getTime()) / 1000 / 60);
+                updateTime.textContent = `Updated: ${timeAgo} minutes ago`;
+            }
+            
+            statusIndicator.className = `status-indicator ${this.getStatusClass()}`;
+        }
+    };
+    </script>
+    <script src="javascripts/cube_tracker.js"></script>
+    <script src="javascripts/map_controls.js"></script>
+    <script>
+    // Static-friendly main.js
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Static Cube Map initializing...');
+        
+        // Initialize the map
+        if (window.MapSetup) {
+            window.MapSetup.initializeMap();
+        }
+        
+        // Initialize with static data
+        if (window.MapData) {
+            window.MapData.initWithStaticData();
+        }
+        
+        // Set up cube tracking
+        if (window.CubeTracker) {
+            window.CubeTracker.initialize();
+        }
+        
+        // Set up controls
+        if (window.MapControls) {
+            window.MapControls.initialize();
+        }
+        
+        console.log('Static Cube Map initialized');
+    });
+    </script>
+</body>
+</html>
