@@ -64,13 +64,27 @@ window.MapData = {
       return;
     }
     
+    // Log cache information if present
+    if (data.cached !== undefined) {
+      if (data.cached) {
+        MapUtils.log(`Using cached data (age: ${data.cache_age}s, expires in: ${data.cache_expires_in}s)`);
+        if (data.stale) {
+          MapUtils.log('Cache is stale but API failed, using stale cache');
+        }
+      } else {
+        MapUtils.log('Fresh data fetched from API');
+      }
+    }
+    
     // Update cache
     this.cache.lastLocation = data;
     this.cache.lastUpdate = new Date();
     this.setApiStatus('online');
     
-    // Add to history
-    this.addToHistory(data);
+    // Add to history (only if not stale cached data)
+    if (!data.stale) {
+      this.addToHistory(data);
+    }
     
     // Notify callbacks
     this.callbacks.onLocationUpdate.forEach(callback => {
@@ -214,6 +228,19 @@ window.MapData = {
     
     if (locationData.context) {
       display += `\n${locationData.context}`;
+    }
+    
+    // Add cache status
+    if (locationData.cached !== undefined) {
+      if (locationData.cached) {
+        if (locationData.stale) {
+          display += '\n🔸 Using stale cached data (API unavailable)';
+        } else {
+          display += `\n🟡 Cached data (${Math.round(locationData.cache_age)}s old)`;
+        }
+      } else {
+        display += '\n🟢 Fresh data';
+      }
     }
     
     return display;

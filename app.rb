@@ -22,7 +22,15 @@ class ExternalCubeMapApp < Sinatra::Base
 
   # Configuration - should be set via environment variables
   GLITCHCUBE_API_BASE = ENV['GLITCHCUBE_API_URL'] || 'http://localhost:4567'
-  UPDATE_INTERVAL = ENV['UPDATE_INTERVAL_SECONDS']&.to_i || 120 # 2 minutes default
+  UPDATE_INTERVAL = ENV['UPDATE_INTERVAL_SECONDS']&.to_i || 300 # 5 minutes default for frontend
+  CACHE_DURATION = ENV['CACHE_DURATION_SECONDS']&.to_i || 300 # 5 minutes default
+  
+  # In-memory cache for location data
+  @@location_cache = {
+    data: nil,
+    last_fetch: nil,
+    mutex: Mutex.new
+  }
 
   # CORS headers for any API calls
   before '/api/*' do
@@ -44,55 +52,14 @@ class ExternalCubeMapApp < Sinatra::Base
     }
   end
 
-  # API endpoint to poll GlitchCube location
+  # API endpoint to get cached GlitchCube location
   get '/api/cube_location' do
     content_type :json
-
-    begin
-      # Make request to main GlitchCube app
-      uri = URI("#{GLITCHCUBE_API_BASE}/api/v1/gps/cube_current_loc")
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == 'https'
-      http.read_timeout = 30
-
-      request = Net::HTTP::Get.new(uri)
-      response = http.request(request)
-
-      if response.code == '200'
-        # Parse and return the location data
-        location_data = JSON.parse(response.body)
-        json(location_data)
-      else
-        # Handle API errors from main app
-        status response.code.to_i
-        json({
-               error: 'Failed to fetch cube location',
-               status: response.code,
-               message: response.body
-             })
-      end
-    rescue Net::HTTPServerError => e
-      status 503
-      json({
-             error: 'Connection timeout',
-             message: 'Could not connect to GlitchCube API',
-             details: e.message
-           })
-    rescue JSON::ParserError => e
-      status 502
-      json({
-             error: 'Invalid response format',
-             message: 'GlitchCube API returned invalid JSON',
-             details: e.message
-           })
-    rescue StandardError => e
-      status 500
-      json({
-             error: 'Internal server error',
-             message: e.message,
-             timestamp: Time.now.utc.iso8601
-           })
-    end
+    
+    # Add cache headers for client-side caching
+    headers 'Cache-Control' => 'public, max-age=60' # 1 minute client cache
+    
+    json(get_cached_location)
   end
 
   # Serve bundled GeoJSON files
@@ -120,12 +87,25 @@ class ExternalCubeMapApp < Sinatra::Base
   # Health check endpoint
   get '/health' do
     content_type :json
+    
+    # Get cache status
+    cache_status = @@location_cache[:mutex].synchronize do
+      {
+        has_data: !@@location_cache[:data].nil?,
+        last_fetch: @@location_cache[:last_fetch]&.utc&.iso8601,
+        cache_age: @@location_cache[:last_fetch] ? (Time.now - @@location_cache[:last_fetch]).round(1) : nil,
+        is_fresh: @@location_cache[:last_fetch] && (Time.now - @@location_cache[:last_fetch]) < CACHE_DURATION
+      }
+    end
+    
     json({
            status: 'ok',
            app: 'External Cube Map',
            version: '1.0.0',
            glitchcube_api_url: GLITCHCUBE_API_BASE,
            update_interval: UPDATE_INTERVAL,
+           cache_duration: CACHE_DURATION,
+           cache_status: cache_status,
            timestamp: Time.now.utc.iso8601
          })
   end
@@ -161,6 +141,94 @@ class ExternalCubeMapApp < Sinatra::Base
   end
 
   private
+
+  # Get cached location data, fetching from API if cache is stale
+  def get_cached_location
+    @@location_cache[:mutex].synchronize do
+      now = Time.now
+      
+      # Check if cache is fresh (within CACHE_DURATION)
+      if @@location_cache[:data] && 
+         @@location_cache[:last_fetch] && 
+         (now - @@location_cache[:last_fetch]) < CACHE_DURATION
+        
+        # Return cached data with cache metadata
+        return @@location_cache[:data].merge({
+          cached: true,
+          cache_age: (now - @@location_cache[:last_fetch]).round(1),
+          cache_expires_in: (CACHE_DURATION - (now - @@location_cache[:last_fetch])).round(1)
+        })
+      end
+      
+      # Cache is stale or empty, fetch fresh data
+      fresh_data = fetch_location_from_api
+      
+      if fresh_data[:error]
+        # API failed - return cached data if we have it, otherwise return error
+        if @@location_cache[:data]
+          return @@location_cache[:data].merge({
+            cached: true,
+            stale: true,
+            cache_age: @@location_cache[:last_fetch] ? (now - @@location_cache[:last_fetch]).round(1) : nil,
+            api_error: fresh_data[:error]
+          })
+        else
+          return fresh_data
+        end
+      end
+      
+      # Successfully fetched fresh data
+      @@location_cache[:data] = fresh_data
+      @@location_cache[:last_fetch] = now
+      
+      fresh_data.merge({
+        cached: false,
+        fetched_at: now.utc.iso8601
+      })
+    end
+  end
+  
+  # Fetch location from main GlitchCube API
+  def fetch_location_from_api
+    begin
+      uri = URI("#{GLITCHCUBE_API_BASE}/api/v1/gps/location.json")
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = uri.scheme == 'https'
+      http.read_timeout = 30
+
+      request = Net::HTTP::Get.new(uri)
+      response = http.request(request)
+
+      if response.code == '200'
+        location_data = JSON.parse(response.body)
+        return location_data
+      else
+        return {
+          error: 'Failed to fetch cube location',
+          status: response.code.to_i,
+          message: response.body
+        }
+      end
+    rescue Net::HTTPServerError => e
+      return {
+        error: 'Connection timeout',
+        message: 'Could not connect to GlitchCube API',
+        details: e.message
+      }
+    rescue JSON::ParserError => e
+      return {
+        error: 'Invalid response format',
+        message: 'GlitchCube API returned invalid JSON',
+        details: e.message
+      }
+    rescue StandardError => e
+      return {
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: Time.now.utc.iso8601
+      }
+    end
+  end
 
   def json(data)
     JSON.pretty_generate(data)

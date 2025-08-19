@@ -1,13 +1,11 @@
-name: Update Cube Map
+name: Deploy Static Cube Map
 on:
-  schedule:
-    - cron: '*/5 * * * *'  # Every 5 minutes
   workflow_dispatch:       # Allow manual triggers
   push:
-    branches: [ main ]     # Also update on pushes
+    branches: [ main ]     # Deploy on pushes to main
 
 jobs:
-  update:
+  deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write      # Needed to commit updates
@@ -18,28 +16,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Fetch GPS Data
-        env:
-          PLAYA_API_URL: ${{ secrets.PLAYA_API_URL }}
+      - name: Prepare Static Data
         run: |
-          echo "Fetching data from: $PLAYA_API_URL"
+          echo "Setting up static location data"
           
-          # Fetch current location with timeout and fallback
-          timeout 30 curl -f -s "$PLAYA_API_URL/api/v1/gps/location" > location.json || {
-            echo '{"error":"API unavailable","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","lat":40.7864,"lng":-119.2065,"source":"fallback"}' > location.json
-            echo "Failed to fetch location, using fallback"
+          # Use a static location for GitHub Pages (Center Camp area)
+          cat > location.json << 'EOF'
+          {
+            "lat": 40.7864,
+            "lng": -119.2065,
+            "timestamp": "2025-08-19T00:00:00Z",
+            "source": "static",
+            "zone": "center_camp",
+            "address": "Center Camp",
+            "intersection": {
+              "radial": "6:00",
+              "arc": "Esplanade",
+              "radial_distance": 0,
+              "arc_distance": 0
+            },
+            "landmarks": [
+              {
+                "name": "Center Camp",
+                "type": "center_camp",
+                "distance_meters": 0.0
+              }
+            ],
+            "within_fence": true,
+            "distance_from_man": "2400 feet",
+            "lat_lng": {
+              "lat": 40.7864,
+              "lng": -119.2065
+            }
           }
+          EOF
           
-          # Fetch landmarks (these rarely change, so failure is less critical)
-          timeout 30 curl -f -s "$PLAYA_API_URL/api/v1/gps/landmarks" > landmarks.json || {
-            echo "Failed to fetch landmarks, using existing file"
-            test -f landmarks.json || cp public/geojson/burning_man_landmarks.json landmarks.json
-          }
+          # Use existing landmarks file
+          cp public/geojson/burning_man_landmarks.json landmarks.json
           
-          # Debug output
-          echo "Location data:"
-          cat location.json | head -c 200
-          echo -e "\n..."
+          echo "Static location set to Center Camp"
           
       - name: Generate Static Page
         run: |

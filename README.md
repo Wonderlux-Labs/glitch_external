@@ -4,11 +4,11 @@ A lightweight external map application that displays the real-time location of t
 
 ## Overview
 
-This is a standalone Sinatra application designed to run on external servers to display the GlitchCube's live location. It polls the main GlitchCube application every 2 minutes for location updates and displays them on an interactive map with full context.
+This is a standalone Sinatra application designed to run on external servers to display the GlitchCube's live location. It features intelligent server-side caching that reduces API load by only fetching location updates every 5 minutes, regardless of visitor count.
 
 ## Features
 
-- **Real-time Location Tracking**: Shows GlitchCube's current position with 2-minute updates
+- **Efficient Location Tracking**: Shows GlitchCube's current position with server-side caching (5-minute updates, shared across all visitors)
 - **Rich Context Information**: Displays BRC addresses, nearby landmarks, and proximity data
 - **Interactive Map**: Full Leaflet.js-powered map with zoom, pan, and layer controls
 - **Route History**: Optional display of travel path with directional indicators
@@ -50,7 +50,8 @@ Bundle GeoJSON Files → Serve Static Map Data
    ```bash
    # For production (using Tailscale IP)
    export GLITCHCUBE_API_URL="http://100.104.211.107:4567"
-   export UPDATE_INTERVAL_SECONDS=120  # 2 minutes
+   export UPDATE_INTERVAL_SECONDS=300  # 5 minutes (frontend polling)
+   export CACHE_DURATION_SECONDS=300   # 5 minutes (server-side cache)
    
    # For local development
    # export GLITCHCUBE_API_URL="http://localhost:4567"
@@ -70,7 +71,8 @@ Bundle GeoJSON Files → Serve Static Map Data
 ### Environment Variables
 
 - `GLITCHCUBE_API_URL`: Base URL of the main GlitchCube application (required)
-- `UPDATE_INTERVAL_SECONDS`: Polling interval in seconds (default: 120)
+- `UPDATE_INTERVAL_SECONDS`: Frontend polling interval in seconds (default: 300)
+- `CACHE_DURATION_SECONDS`: Server-side cache duration in seconds (default: 300)
 - `RACK_ENV`: Environment mode (development/production)
 
 ### Example Production Setup
@@ -78,7 +80,8 @@ Bundle GeoJSON Files → Serve Static Map Data
 ```bash
 # Using Tailscale internal network
 export GLITCHCUBE_API_URL="http://100.104.211.107:4567"
-export UPDATE_INTERVAL_SECONDS=120
+export UPDATE_INTERVAL_SECONDS=300
+export CACHE_DURATION_SECONDS=300
 export RACK_ENV=production
 export PORT=9292  # External app port
 
@@ -108,7 +111,7 @@ This setup ensures the external map app can poll the main app internally while b
 
 The external app connects to these endpoints on the main GlitchCube app:
 
-- `GET /api/v1/gps/cube_current_loc` - Rich location data with proximity context
+- `GET /api/v1/gps/location.json` - Rich location data with proximity context
 
 ## GeoJSON Datasets
 
