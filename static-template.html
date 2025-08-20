@@ -52,6 +52,14 @@
         .status-online { background: #00ff00; }
         .status-offline { background: #ff0000; }
         .status-static { background: #00aaff; }
+        .status-degraded { background: #ffaa00; }
+        .status-loading { background: #888888; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
         
         .location-info {
             margin-top: 5px;
@@ -166,127 +174,65 @@
         };
     </script>
     
-    <!-- Static-friendly Map JavaScript -->
+    <!-- Enhanced Map JavaScript with offline support -->
     <script src="javascripts/map_utils.js"></script>
     <script src="javascripts/map_setup.js"></script>
-    <script>
-    // Static version of map_data.js
-    window.MapData = {
-        cache: {
-            lastLocation: null,
-            locationHistory: [],
-            lastUpdate: null,
-            apiStatus: 'static'
-        },
-        
-        // Initialize with static data
-        initWithStaticData: function() {
-            if (window.CUBE_LOCATION) {
-                this.cache.lastLocation = window.CUBE_LOCATION;
-                this.cache.lastUpdate = new Date(window.LAST_UPDATE || Date.now());
-                this.cache.apiStatus = window.CUBE_LOCATION.error ? 'offline' : 'static';
-                
-                // Trigger location update
-                if (this.onLocationUpdateCallback) {
-                    this.onLocationUpdateCallback(window.CUBE_LOCATION);
-                }
-                
-                // Update UI
-                this.updateLocationDisplay();
-            }
-        },
-        
-        onLocationUpdate: function(callback) {
-            this.onLocationUpdateCallback = callback;
-        },
-        
-        onStatusChange: function(callback) {
-            this.onStatusChangeCallback = callback;
-        },
-        
-        getCurrentLocation: function() {
-            return this.cache.lastLocation;
-        },
-        
-        getApiStatus: function() {
-            return this.cache.apiStatus;
-        },
-        
-        getLastUpdate: function() {
-            return this.cache.lastUpdate;
-        },
-        
-        getStatusClass: function() {
-            switch (this.cache.apiStatus) {
-                case 'static': return 'status-static';
-                case 'offline': return 'status-offline';
-                default: return 'status-static';
-            }
-        },
-        
-        updateLocationDisplay: function() {
-            const locationInfo = document.getElementById('location-info');
-            const locationText = document.getElementById('location-text');
-            const coordinates = document.getElementById('coordinates');
-            const context = document.getElementById('context');
-            const updateTime = document.getElementById('update-time');
-            const statusIndicator = document.getElementById('status-indicator');
-            
-            if (this.cache.lastLocation) {
-                const loc = this.cache.lastLocation;
-                
-                if (loc.error) {
-                    locationText.textContent = `Offline: ${loc.error}`;
-                    coordinates.textContent = `Last known: ${loc.lat?.toFixed(6) || 'N/A'}, ${loc.lng?.toFixed(6) || 'N/A'}`;
-                    context.textContent = '';
-                } else {
-                    locationText.textContent = loc.address || 'Unknown location';
-                    coordinates.textContent = `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
-                    context.textContent = loc.zone ? `Zone: ${loc.zone}` : '';
-                }
-            } else {
-                locationText.textContent = 'No location data';
-                coordinates.textContent = '';
-                context.textContent = '';
-            }
-            
-            if (this.cache.lastUpdate) {
-                const timeAgo = Math.round((Date.now() - this.cache.lastUpdate.getTime()) / 1000 / 60);
-                updateTime.textContent = `Updated: ${timeAgo} minutes ago`;
-            }
-            
-            statusIndicator.className = `status-indicator ${this.getStatusClass()}`;
-        }
-    };
-    </script>
+    <script src="javascripts/map_data_enhanced.js"></script>
     <script src="javascripts/cube_tracker.js"></script>
     <script src="javascripts/map_controls.js"></script>
     <script>
-    // Static-friendly main.js
+    // Enhanced initialization with offline support
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('Static Cube Map initializing...');
+        console.log('🎲 GlitchCube Map initializing...');
         
         // Initialize the map
         if (window.MapSetup) {
             window.MapSetup.initializeMap();
+            console.log('✅ Map setup complete');
         }
         
-        // Initialize with static data
+        // Initialize enhanced data management
         if (window.MapData) {
-            window.MapData.initWithStaticData();
+            window.MapData.initialize();
+            console.log('✅ Data management initialized');
         }
         
         // Set up cube tracking
         if (window.CubeTracker) {
             window.CubeTracker.initialize();
+            console.log('✅ Cube tracker initialized');
         }
         
         // Set up controls
         if (window.MapControls) {
             window.MapControls.initialize();
+            console.log('✅ Map controls initialized');
         }
         
-        console.log('Static Cube Map initialized');
+        // Add refresh button functionality
+        const refreshButton = document.createElement('button');
+        refreshButton.innerHTML = '🔄';
+        refreshButton.className = 'control-button';
+        refreshButton.title = 'Refresh Data';
+        refreshButton.style.order = '5';
+        refreshButton.addEventListener('click', function() {
+            if (window.MapData) {
+                window.MapData.refresh();
+            }
+        });
+        
+        const controlsContainer = document.querySelector('.map-controls');
+        if (controlsContainer) {
+            controlsContainer.appendChild(refreshButton);
+        }
+        
+        // Log diagnostics
+        if (window.MapData && window.MapData.getDiagnostics) {
+            const diag = window.MapData.getDiagnostics();
+            console.log('📊 Diagnostics:', diag);
+        }
+        
+        console.log('🎉 GlitchCube Map fully initialized');
     });
     </script>
 </body>

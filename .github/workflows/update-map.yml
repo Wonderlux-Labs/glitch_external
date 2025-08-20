@@ -18,10 +18,68 @@ jobs:
         
       - name: Prepare Static Data
         run: |
-          echo "Setting up static location data"
+          echo "🎲 Setting up static location data"
           
-          # Use a static location for GitHub Pages (Center Camp area)
-          cat > location.json << 'EOF'
+          # Try to fetch real data from API first (if available)
+          API_URL="${{ secrets.PLAYA_API_URL }}"
+          if [ -n "$API_URL" ]; then
+            echo "🌐 Attempting to fetch live data from API: $API_URL"
+            
+            # Try to fetch location data
+            if curl -f -s --connect-timeout 10 --max-time 30 \
+                    "$API_URL/api/v1/gps/location.json" > temp_location.json 2>/dev/null; then
+              echo "✅ Successfully fetched live location data"
+              mv temp_location.json location.json
+              
+              # Save this as our backup for next time
+              cp location.json data/last_known_location.json
+            else
+              echo "❌ Failed to fetch live data, using fallback"
+              
+              # Try to use previously saved data if it exists
+              if [ -f "data/last_known_location.json" ]; then
+                echo "📂 Using previously saved location data"
+                cp data/last_known_location.json location.json
+              else
+                echo "🏕️ Using static fallback data"
+                # Create static fallback location
+                cat > location.json << 'EOF'
+          {
+            "lat": 40.7864,
+            "lng": -119.2065,
+            "timestamp": "2025-08-19T00:00:00Z",
+            "source": "static_fallback",
+            "zone": "center_camp",
+            "address": "Center Camp (Demo Mode)",
+            "intersection": {
+              "radial": "6:00",
+              "arc": "Esplanade",
+              "radial_distance": 0,
+              "arc_distance": 0
+            },
+            "landmarks": [
+              {
+                "name": "Center Camp",
+                "type": "center_camp", 
+                "distance_meters": 0.0
+              }
+            ],
+            "within_fence": true,
+            "distance_from_man": "2400 feet",
+            "lat_lng": {
+              "lat": 40.7864,
+              "lng": -119.2065
+            },
+            "note": "API unavailable at build time - using static data"
+          }
+          EOF
+              fi
+            fi
+          else
+            echo "⚠️ No API URL configured, using static data"
+            
+            # Use static location for GitHub Pages (Center Camp area)
+            cat > location.json << 'EOF'
           {
             "lat": 40.7864,
             "lng": -119.2065,
@@ -50,43 +108,56 @@ jobs:
             }
           }
           EOF
+          fi
           
-          # Use existing landmarks file
-          cp public/geojson/burning_man_landmarks.json landmarks.json
+          # Use existing landmarks file or fallback
+          if [ -f "public/geojson/burning_man_landmarks.json" ]; then
+            cp public/geojson/burning_man_landmarks.json landmarks.json
+            echo "✅ Using bundled landmarks data"
+          elif [ -f "landmarks-fallback.json" ]; then
+            cp landmarks-fallback.json landmarks.json
+            echo "✅ Using fallback landmarks data"
+          else
+            echo "❌ No landmarks data available"
+            echo '{"landmarks": [], "source": "empty", "count": 0}' > landmarks.json
+          fi
           
-          echo "Static location set to Center Camp"
+          echo ""
+          echo "📍 Final location data:"
+          cat location.json | jq -r '.address // "Unknown"' 2>/dev/null || echo "Unable to parse address"
+          echo ""
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
           
       - name: Generate Static Page
         run: |
-          # Use the static template
-          cp static-template.html index.html
+          echo "🎲 Generating static page with Node.js data injection..."
           
-          # Create the data injection script
-          cat > data_injection.js << 'EOF'
-          <script>
-          window.CUBE_LOCATION = LOCATION_DATA_PLACEHOLDER;
-          window.LANDMARKS_DATA = LANDMARKS_DATA_PLACEHOLDER;
-          window.LAST_UPDATE = 'LAST_UPDATE_PLACEHOLDER';
-          window.STATIC_MODE = true;
-          </script>
-          EOF
+          # Make the injection script executable
+          chmod +x scripts/inject-data.cjs
           
-          # Replace placeholders with actual data
-          sed -i "s/LOCATION_DATA_PLACEHOLDER/$(cat location.json | jq -c .)/g" data_injection.js
-          sed -i "s/LANDMARKS_DATA_PLACEHOLDER/$(cat landmarks.json | jq -c .)/g" data_injection.js
-          sed -i "s/LAST_UPDATE_PLACEHOLDER/$(date -u +%Y-%m-%dT%H:%M:%SZ)/g" data_injection.js
-          
-          # Inject the data into the HTML
-          sed -i '/<!--DATA_INJECTION_POINT-->/r data_injection.js' index.html
-          sed -i '/<!--DATA_INJECTION_POINT-->/d' index.html
+          # Run the data injection script
+          node scripts/inject-data.cjs
           
           # Copy all static assets
+          echo "📁 Copying static assets..."
           cp -r public/* ./
           
           # Debug: Show what we generated
+          echo ""
+          echo "📊 Generation complete:"
           echo "Generated index.html size: $(wc -c < index.html) bytes"
-          echo "First 500 chars of location data:"
-          head -c 500 location.json
+          echo ""
+          echo "🗺️ Location data preview:"
+          head -c 200 location.json
+          echo ""
+          echo ""
+          echo "🏛️ Landmarks data preview:"
+          head -c 200 landmarks.json
+          echo ""
           
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -99,3 +170,34 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        
+      - name: Commit Updated Data
+        if: success()
+        run: |
+          # Check if we have new data to commit
+          if [ -f "data/last_known_location.json" ]; then
+            # Configure git
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+            
+            # Add any new data files
+            git add data/last_known_location.json
+            
+            # Check if there are changes to commit
+            if git diff --staged --quiet; then
+              echo "📭 No new data to commit"
+            else
+              # Commit the updated data
+              git commit -m "🤖 Update last known location data
+
+Auto-updated from successful API fetch during deployment.
+
+$(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)"
+              
+              # Push the changes back to the repository
+              git push
+              echo "✅ Successfully committed updated location data"
+            fi
+          else
+            echo "📭 No persistent data to commit"
+          fi

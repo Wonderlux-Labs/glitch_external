@@ -1,0 +1,2 @@
+# This directory stores the last known good location data for fallback deployments
+# Files in this directory are updated automatically by GitHub Actions when API fetches succeed
