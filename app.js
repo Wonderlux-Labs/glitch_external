@@ -42,23 +42,21 @@ const MapUtils = {
     },
     
     createCubeIcon: function() {
-        const cubeIconSvg = `
-            <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <linearGradient id="cubeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:1" />
-                        <stop offset="50%" style="stop-color:#4ecdc4;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#45b7d1;stop-opacity:1" />
-                    </linearGradient>
-                </defs>
-                <rect x="4" y="4" width="24" height="24" rx="4" ry="4" 
-                      fill="url(#cubeGradient)" stroke="#fff" stroke-width="2"/>
-                <circle cx="16" cy="16" r="4" fill="#fff" opacity="0.8"/>
-                <text x="16" y="20" text-anchor="middle" fill="#000" font-size="8" font-weight="bold">●</text>
-            </svg>
-        `;
+        const cubeIconSvg = '<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' +
+            '<defs>' +
+            '<linearGradient id="cubeGradient" x1="0%" y1="0%" x2="100%" y2="100%">' +
+            '<stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:1" />' +
+            '<stop offset="50%" style="stop-color:#4ecdc4;stop-opacity:1" />' +
+            '<stop offset="100%" style="stop-color:#45b7d1;stop-opacity:1" />' +
+            '</linearGradient>' +
+            '</defs>' +
+            '<rect x="4" y="4" width="24" height="24" rx="4" ry="4" fill="url(#cubeGradient)" stroke="#fff" stroke-width="2"/>' +
+            '<circle cx="16" cy="16" r="4" fill="#fff" opacity="0.8"/>' +
+            '<text x="16" y="20" text-anchor="middle" fill="#000" font-size="8" font-weight="bold">●</text>' +
+            '</svg>';
         
-        const iconUrl = 'data:image/svg+xml;charset=UTF-8;base64,' + btoa(cubeIconSvg);
+        // Use URL encoding instead of base64 to avoid encoding issues
+        const iconUrl = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(cubeIconSvg);
         
         return L.icon({
             iconUrl: iconUrl,
